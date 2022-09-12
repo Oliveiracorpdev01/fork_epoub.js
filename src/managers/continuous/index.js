@@ -9,7 +9,20 @@ class ContinuousViewManager extends DefaultViewManager {
 		super(options);
 
 		this.name = "continuous";
-		this.pageInLoad = 0;
+
+		//variavel que controla o loading
+		this.loadingValue = 0
+
+		//altura original da página
+		this.originalHeight = 0
+		this.originalWidth = 0
+
+		//Página em loading
+		this.pageInLoadingUp = 0
+		this.pageInLoadingDown = 0
+
+		//Refresh na página
+		this.refreshPage = 300
 
 		this.settings = extend(this.settings || {}, {
 			infinite: true,
@@ -48,6 +61,7 @@ class ContinuousViewManager extends DefaultViewManager {
 
 		this.scrollTop = 0;
 		this.scrollLeft = 0;
+
 	}
 
 	display(section, target) {
@@ -76,11 +90,12 @@ class ContinuousViewManager extends DefaultViewManager {
 	moveTo(offset) {
 		// var bounds = this.stage.bounds();
 		// var dist = Math.floor(offset.top / bounds.height) * bounds.height;
+
 		var distX = 0,
-				distY = 0;
+			distY = 0;
 
 		var offsetX = 0,
-				offsetY = 0;
+			offsetY = 0;
 
 		if (!this.isPaginated) {
 			distY = offset.top;
@@ -133,7 +148,13 @@ class ContinuousViewManager extends DefaultViewManager {
 	}
 
 	append(section) {
+
 		var view = this.createView(section);
+
+		const currentDate = new Date();
+		const timestamp = currentDate.getTime();
+
+		this.loadingValue = timestamp;
 
 		view.on(EVENTS.VIEWS.RESIZED, (bounds) => {
 			view.expanded = true;
@@ -155,7 +176,13 @@ class ContinuousViewManager extends DefaultViewManager {
 	}
 
 	prepend(section) {
+
 		var view = this.createView(section);
+
+		const currentDate = new Date();
+		const timestamp = currentDate.getTime();
+
+		this.loadingValue = timestamp;
 
 		view.on(EVENTS.VIEWS.RESIZED, (bounds) => {
 			this.counter(bounds);
@@ -179,11 +206,14 @@ class ContinuousViewManager extends DefaultViewManager {
 
 	counter(bounds) {
 		if (this.settings.axis === "vertical") {
-			if (this.settings.manager == "continuous") {
-				this.scrollBy(0, 1, true);
-			} else {
-				this.scrollBy(0, bounds.heightDelta, true);
+			let heightDelta = 3
+			let compare = localStorage.getItem('psiqueasy-epub-heightDelta')
+			if (compare == 'true') {
+				heightDelta = bounds.heightDelta
+				localStorage.setItem('psiqueasy-epub-heightDelta', false)
 			}
+			this.scrollBy(0, heightDelta, true);
+			heightDelta = 3
 		} else {
 			this.scrollBy(bounds.widthDelta, 0, true);
 		}
@@ -221,13 +251,14 @@ class ContinuousViewManager extends DefaultViewManager {
 				}
 				visible.push(view);
 			} else {
-				this.q.enqueue(view.destroy.bind(view));
+				//desativada a remoção de páginas
+				// this.q.enqueue(view.destroy.bind(view));
 				// console.log("hidden " + view.index, view.displayed);
 
-				clearTimeout(this.trimTimeout);
-				this.trimTimeout = setTimeout(function () {
-					this.q.enqueue(this.trim.bind(this));
-				}.bind(this), 250);
+				// clearTimeout(this.trimTimeout);
+				// this.trimTimeout = setTimeout(function () {
+				// 	this.q.enqueue(this.trim.bind(this));
+				// }.bind(this), 250);
 			}
 
 		}
@@ -245,6 +276,7 @@ class ContinuousViewManager extends DefaultViewManager {
 	}
 
 	check(_offsetLeft, _offsetTop) {
+
 		var checking = new defer();
 		var newViews = [];
 
@@ -288,9 +320,10 @@ class ContinuousViewManager extends DefaultViewManager {
 		let prepend = () => {
 			let first = this.views.first();
 			let prev = first && first.section.prev();
-
 			if (prev) {
-				newViews.push(this.prepend(prev));
+				if (this.pageInLoadingUp == 0) {
+					newViews.push(this.prepend(prev));
+				}
 			}
 		};
 
@@ -299,7 +332,9 @@ class ContinuousViewManager extends DefaultViewManager {
 			let next = last && last.section.next();
 
 			if (next) {
-				newViews.push(this.append(next));
+				if (this.pageInLoadingDown == 0) {
+					newViews.push(this.append(next));
+				}
 			}
 
 		};
@@ -307,29 +342,63 @@ class ContinuousViewManager extends DefaultViewManager {
 		let end = offset + visibleLength + delta;
 		let start = offset - delta;
 
-		if (this.pageInLoad == 0) {
-			if (end >= contentLength) {
-				append();
-			}
-
-			if (start < 0) {
-				prepend();
-			}
+		if (end >= contentLength) {
+			append();
 		}
 
-
+		if (start < 0) {
+			prepend();
+		}
 
 		let promises = newViews.map((view) => {
 			return view.display(this.request);
 		});
 
+		// console.log('define espacionamento entre páginas')
+		try {
+			if (this.originalHeight == 0) {
+				this.originalHeight = (document.querySelector('#load-epubjs .epub-container').children[0].querySelector('iframe').contentDocument.querySelector('body').style.backgroundSize.split(' ')[1])
+				this.originalWidth = (document.querySelector('#load-epubjs .epub-container').children[0].querySelector('iframe').contentDocument.querySelector('body').style.backgroundSize.split(' ')[0])
+				document.querySelector('#load-epubjs .epub-container').children[0].style.width = this.originalWidth
+				document.querySelector('#load-epubjs .epub-container').children[0].style.height = this.originalHeight
+				document.querySelector('#load-epubjs .epub-container').children[0].style.zoom = localStorage.getItem('psiqueasy-epub-zoom')
+				document.querySelector('#load-epubjs .epub-container').children[0].style.marginBottom = '1rem'
+			}
+			if (this.originalHeight != 0) {
+				for (let i = 0; i < document.querySelector('#load-epubjs .epub-container').children.length; i++) {
+					document.querySelector('#load-epubjs .epub-container').children[i].style.height = this.originalHeight
+					document.querySelector('#load-epubjs .epub-container').children[i].style.width = this.originalWidth
+					document.querySelector('#load-epubjs .epub-container').children[i].style.zoom = localStorage.getItem('psiqueasy-epub-zoom')
+					document.querySelector('#load-epubjs .epub-container').children[i].style.marginBottom = '1rem'
+				}
+			}
+		}
+		catch (err) {
+			// console.log(err)
+		}
+
 		if (newViews.length) {
-			this.pageInLoad = 1;
+
+			if (this.refreshPage <= 0) {
+				document.location.reload();
+			}
+
+			this.pageInLoadingUp = 1
+			this.pageInLoadingDown = 1
+
+			// console.log('start - inicia o loading')
+			document.getElementById("loading-bg-epub").style.display = "block";
+
 			return Promise.all(promises)
 				.then(() => {
-					this.pageInLoad = 0;
-					return this.check();
+					this.refreshPage--
+					this.pageInLoadingDown = 0
+					setTimeout(() => {
+						this.pageInLoadingUp = 0
+					}, 1)
+					document.getElementById("loading-bg-epub").style.display = "none";
 
+					return this.check();
 				})
 				.then(() => {
 					// Check to see if anything new is on screen after rendering
@@ -393,7 +462,7 @@ class ContinuousViewManager extends DefaultViewManager {
 			if (this.settings.axis === "vertical") {
 				this.scrollTo(0, prevTop - bounds.height, true);
 			} else {
-				if (this.settings.direction === "rtl") {
+				if (this.settings.direction === 'rtl') {
 					if (!this.settings.fullsize) {
 						this.scrollTo(prevLeft, 0, true);
 					} else {
